@@ -1,5 +1,10 @@
 # cacrt
 
+[![Crates.io](https://img.shields.io/crates/v/cacrt.svg)](https://crates.io/crates/cacrt)
+[![Docs.rs](https://docs.rs/cacrt/badge.svg)](https://docs.rs/cacrt)
+[![CI](https://github.com/KarpelesLab/cacrt/actions/workflows/ci.yml/badge.svg)](https://github.com/KarpelesLab/cacrt/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+
 Curated, **`no_std` / no-`alloc`** access to DER-encoded CA root certificates,
 addressable by their OpenSSL subject hash (e.g. `062cdee6.0`).
 

@@ -15,7 +15,7 @@ edition = "2021"
 rust-version = "1.86"
 license = "MIT OR Apache-2.0"
 description = "Curated, no_std/no-alloc access to DER-encoded CA root certificates by OpenSSL subject hash"
-repository = "https://github.com/magicaltux/cacrt"
+repository = "https://github.com/KarpelesLab/cacrt"
 keywords = ["ca", "certificate", "x509", "no_std", "tls"]
 categories = ["no-std", "cryptography", "embedded"]
 # Ship the roots + generators, but not throwaway artifacts.
