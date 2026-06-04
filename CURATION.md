@@ -99,7 +99,9 @@ provenance of the trusted set is reviewable over time.
 
 - CA/Browser Forum, *Baseline Requirements for the Issuance and Management of
   Publicly-Trusted TLS Server Certificates* — <https://cabforum.org/working-groups/server/baseline-requirements/requirements/>
-- Mozilla Root Store Policy & *Required or Recommended Practices* — <https://wiki.mozilla.org/CA/Required_or_Recommended_Practices>
+- Mozilla Root Store Policy — <https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/>
+- Mozilla CA Certificate Change Requests (inclusion/removal process) — <https://wiki.mozilla.org/CA/Certificate_Change_Requests>
+- Mozilla *Required or Recommended Practices* — <https://wiki.mozilla.org/CA/Required_or_Recommended_Practices>
 - Chrome Root Program Policy — <https://googlechrome.github.io/chromerootprogram/>
 - Common CA Database (CCADB) — <https://www.ccadb.org/>
 - OpenSSL subject hash: `crypto/x509/x_name.c` (`x509_name_canon`), `crypto/x509/x509_cmp.c` (`X509_NAME_hash_ex`)
