@@ -122,6 +122,9 @@ fn collect_pems(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
         if path.is_dir() {
             collect_pems(&path, out);
         } else if path.extension().and_then(|s| s.to_str()) == Some("pem") {
+            // Only *.pem is compiled in. A retired root is renamed to
+            // `*.disabled` so it stays in the repo (audit trail) but is excluded
+            // from the store — see CURATION.md "Disabling a root".
             out.push(path);
         }
     }

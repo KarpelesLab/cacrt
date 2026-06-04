@@ -74,6 +74,21 @@ A certificate is included only if it passes **all** of the following. Rules 1, 3
    is applied as reviewer guidance when adding roots rather than a hard automated
    gate.
 
+## Disabling a root
+
+To retire a root we have already shipped, **rename its `.pem` file to
+`.disabled`** (e.g. `Buypass_Class_3_Root_CA.pem` → `Buypass_Class_3_Root_CA.disabled`).
+The build only compiles `*.pem`, so a `.disabled` file is excluded from the
+generated store — but it stays in the repository, preserving the certificate
+itself, its company `README.md`, and the recorded rationale. This keeps the audit
+trail intact (we can always see what was once trusted and why it was dropped)
+without deleting history. Record every such change in `CHANGELOG-roots.md`, and
+add a status banner to the company's `README.md`.
+
+Typical reasons to disable rather than keep a root: the CA has stopped issuing
+TLS certificates and all of its end-entity certificates have since expired (so the
+anchor can no longer serve any live chain), or a root program has distrusted it.
+
 ## Auditability
 
 Every addition or removal of a root is recorded in
