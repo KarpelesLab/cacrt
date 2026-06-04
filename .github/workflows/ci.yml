@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test + cross-check vs openssl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test (includes openssl subject-hash cross-check)
+        run: cargo test --all-targets
+      - name: Verify curated roots against curation rules
+        run: cargo run --example cacrt-tool -- verify
+
+  no_std:
+    name: Prove no_std / no-alloc (bare metal)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabi
+      # The library must build for a target with no std and no default
+      # allocator. If it referenced std or alloc, this would fail to compile.
+      - name: Build library for thumbv7em-none-eabi
+        run: cargo build --lib --target thumbv7em-none-eabi
+
+  msrv:
+    name: Minimum supported Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.86.0
+      - name: Build on MSRV
+        run: cargo build --lib

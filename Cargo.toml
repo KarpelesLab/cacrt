@@ -1,0 +1,28 @@
+# `cacrt` — a no_std, no-alloc curated CA root store.
+#
+# Single crate on purpose (no workspace): keeps release-plz focused on
+# publishing exactly this one package.
+#
+# The library has ZERO runtime dependencies and is #![no_std] with no `alloc`.
+# All DER parsing, hashing and curation happen at build time in build.rs, which
+# pulls host-side helpers from ./build_support via #[path]. The maintenance
+# tooling lives in ./examples and reuses the same helpers; neither is linked
+# into the published library.
+[package]
+name = "cacrt"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.86"
+license = "MIT OR Apache-2.0"
+description = "Curated, no_std/no-alloc access to DER-encoded CA root certificates by OpenSSL subject hash"
+repository = "https://github.com/magicaltux/cacrt"
+keywords = ["ca", "certificate", "x509", "no_std", "tls"]
+categories = ["no-std", "cryptography", "embedded"]
+# Ship the roots + generators, but not throwaway artifacts.
+exclude = ["/.github", "/*.txt"]
+
+[lib]
+path = "src/lib.rs"
+
+# The library itself needs nothing. build.rs and examples use only std + the
+# hand-rolled helpers under build_support/, so there are no dependencies at all.
