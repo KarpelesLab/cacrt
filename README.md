@@ -62,10 +62,14 @@ embedded root against the system `openssl x509 -subject_hash`.
 
 ## How the root set is maintained
 
-The source of truth is **one PEM file per root** under [`roots/`](roots/), each
-carrying a metadata header (label, subject hash, SHA-1 fingerprint, source). The
-set is seeded from Mozilla's NSS `certdata.txt` and then maintained by hand
-against the rules in [`CURATION.md`](CURATION.md). At build time, `build.rs`
+The source of truth is **one PEM file per root**, organized **one folder per
+operating company** under [`roots/`](roots/) (e.g. `roots/DigiCert/`,
+`roots/Sectigo/`). Each PEM carries a metadata header (label, subject hash,
+SHA-1 fingerprint, source), and each company folder has a `README.md` describing
+that CA's roots, the rationale for inclusion, CA/Browser Forum compliance, any
+past non-compliance, and transparency. The set was seeded from Mozilla's NSS
+`certdata.txt` and is now a frozen baseline maintained by hand against the rules
+in [`CURATION.md`](CURATION.md). At build time, `build.rs` walks the tree,
 converts every PEM to DER, computes its subject hash, and emits a sorted, indexed
 static table.
 

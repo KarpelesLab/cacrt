@@ -162,8 +162,13 @@ fn cmd_import(path: Option<&String>) -> Result<(), String> {
     }
 
     let now = curation::now_yyyymmddhhmmss();
-    let dir = roots_dir();
+    // The curated set is a frozen baseline maintained by hand under
+    // roots/<company>/. `import` is now a reference/seeding aid only, so it
+    // writes a flat dump to import-staging/ rather than touching roots/. Use
+    // `diff` to see how a fresh certdata.txt compares to the committed set.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("import-staging");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    eprintln!("note: roots/ is a frozen baseline; writing to import-staging/ for reference\n");
 
     let mut used_names: BTreeMap<String, u32> = BTreeMap::new();
     let (mut written, mut skipped) = (0u32, 0u32);
@@ -322,25 +327,36 @@ fn cmd_hash(path: Option<&String>) -> Result<(), String> {
 // helpers
 // ---------------------------------------------------------------------------
 
+/// Load every root PEM, recursing through the per-company subdirectories.
 fn load_roots() -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
-    let dir = roots_dir();
+    let mut paths = Vec::new();
+    collect_pems(&roots_dir(), &mut paths)?;
+    paths.sort();
     let mut out = Vec::new();
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(_) => return Ok(out),
-    };
-    for e in entries {
-        let path = e.map_err(|e| e.to_string())?.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("pem") {
-            continue;
-        }
+    for path in paths {
         let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let der =
             pem::read_one_certificate(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         out.push((path, der));
     }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(out)
+}
+
+/// Recursively collect `*.pem` paths under `dir` (missing dir => empty).
+fn collect_pems(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+    for e in entries {
+        let path = e.map_err(|e| e.to_string())?.path();
+        if path.is_dir() {
+            collect_pems(&path, out)?;
+        } else if path.extension().and_then(|s| s.to_str()) == Some("pem") {
+            out.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn sanitize(label: &str) -> String {

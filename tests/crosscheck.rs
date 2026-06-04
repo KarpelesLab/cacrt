@@ -12,14 +12,22 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn roots() -> Vec<PathBuf> {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("roots");
-    let mut v: Vec<_> = std::fs::read_dir(dir)
-        .expect("roots dir")
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("pem"))
-        .collect();
+    let mut v = Vec::new();
+    collect_pems(&Path::new(env!("CARGO_MANIFEST_DIR")).join("roots"), &mut v);
     v.sort();
     v
+}
+
+/// Recursively gather `*.pem` paths under `dir` (roots are nested per company).
+fn collect_pems(dir: &Path, out: &mut Vec<PathBuf>) {
+    for e in std::fs::read_dir(dir).expect("roots dir") {
+        let path = e.unwrap().path();
+        if path.is_dir() {
+            collect_pems(&path, out);
+        } else if path.extension().and_then(|s| s.to_str()) == Some("pem") {
+            out.push(path);
+        }
+    }
 }
 
 fn openssl_available() -> bool {

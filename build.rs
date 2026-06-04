@@ -33,16 +33,14 @@ fn main() {
     let now = curation::now_yyyymmddhhmmss();
     let mut entries = Vec::new();
 
-    let dir = std::fs::read_dir(&roots)
-        .unwrap_or_else(|e| panic!("cannot read roots dir {}: {e}", roots.display()));
-    for ent in dir {
-        let path = ent.expect("dir entry").path();
-        if path.extension().and_then(|s| s.to_str()) != Some("pem") {
-            continue;
-        }
+    // Roots are organized one folder per operating company, so walk recursively.
+    let mut pems = Vec::new();
+    collect_pems(&roots, &mut pems);
+    pems.sort();
+    for path in &pems {
         println!("cargo:rerun-if-changed={}", path.display());
         let file = path.file_name().unwrap().to_string_lossy().into_owned();
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{file}: {e}"));
 
         let der = pem::read_one_certificate(&text).unwrap_or_else(|e| panic!("{file}: {e}"));
         let hash = subject_hash(&der).unwrap_or_else(|e| panic!("{file}: subject hash: {e}"));
@@ -110,6 +108,23 @@ fn main() {
     writeln!(src, "];").unwrap();
 
     std::fs::write(Path::new(&out_dir).join("certs.rs"), src).expect("write certs.rs");
+}
+
+/// Recursively collect every `*.pem` under `dir` (roots are nested one folder
+/// per company). Emits `rerun-if-changed` for each directory so that adding or
+/// removing a root triggers a rebuild.
+fn collect_pems(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+    println!("cargo:rerun-if-changed={}", dir.display());
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    for ent in entries {
+        let path = ent.expect("dir entry").path();
+        if path.is_dir() {
+            collect_pems(&path, out);
+        } else if path.extension().and_then(|s| s.to_str()) == Some("pem") {
+            out.push(path);
+        }
+    }
 }
 
 /// Pull the friendly name out of the `# Label: ...` PEM header comment.
