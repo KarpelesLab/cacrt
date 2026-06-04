@@ -21,6 +21,13 @@ categories = ["no-std", "cryptography", "embedded"]
 # Ship the roots + generators, but not throwaway artifacts.
 exclude = ["/.github", "/*.txt"]
 
+# Forbid unsafe across every target in the package (lib, build script,
+# examples, tests). The library also carries #![forbid(unsafe_code)] in
+# src/lib.rs; this extends the same guarantee to the build-time code generator
+# and the maintenance tooling.
+[lints.rust]
+unsafe_code = "forbid"
+
 [lib]
 path = "src/lib.rs"
 
