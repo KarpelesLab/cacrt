@@ -242,9 +242,26 @@ fn cmd_verify() -> Result<(), String> {
             problems += 1;
             eprintln!("FAIL {}: {reason}", path.display());
         }
-        if subject_hash(&der).is_err() {
-            problems += 1;
-            eprintln!("FAIL {}: cannot compute subject hash", path.display());
+        match subject_hash(&der) {
+            Err(_) => {
+                problems += 1;
+                eprintln!("FAIL {}: cannot compute subject hash", path.display());
+            }
+            // Keep the informational `# OpenSSL subject hash:` header honest: a
+            // stale header (e.g. left over from an older hash implementation) is
+            // harmless to the build but misleads anyone reading the file by hand.
+            Ok(hash) => {
+                let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+                if let Some(declared) = parse_header_hash(&text) {
+                    if declared != hash {
+                        problems += 1;
+                        eprintln!(
+                            "FAIL {}: header subject hash {declared:08x} != computed {hash:08x}",
+                            path.display()
+                        );
+                    }
+                }
+            }
         }
     }
     if problems > 0 {
@@ -252,6 +269,15 @@ fn cmd_verify() -> Result<(), String> {
     }
     println!("verified {count} roots, all pass curation rules");
     Ok(())
+}
+
+/// Parse the `# OpenSSL subject hash: <8 hex>` header written by `render_pem`.
+/// Returns `None` if absent or malformed (the header is informational).
+fn parse_header_hash(text: &str) -> Option<u32> {
+    let line = text
+        .lines()
+        .find_map(|l| l.trim_start().strip_prefix("# OpenSSL subject hash:"))?;
+    u32::from_str_radix(line.trim(), 16).ok()
 }
 
 // ---------------------------------------------------------------------------
