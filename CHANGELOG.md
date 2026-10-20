@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/KarpelesLab/cacrt/compare/v0.1.2...v0.1.3) - 2026-10-20
+
+### Other
+
+- Disable emSign ECC Root CA - G3 after intermediate key compromise ([#6](https://github.com/KarpelesLab/cacrt/pull/6))
+
 ## [0.1.2](https://github.com/KarpelesLab/cacrt/compare/v0.1.1...v0.1.2) - 2026-06-05
 
 ### Other
