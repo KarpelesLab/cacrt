@@ -34,3 +34,28 @@ no valid Buypass-issued TLS server certificate can exist in the wild and the
 roots serve no purpose as trust anchors. The certificate files and the company
 `README.md` (with full rationale and sources) are kept in `roots/Buypass/`.
 See <https://www.buypass.com/products/tls-ssl-certificates/discontinues-issuance-of-tls-ssl-certificates>.
+
+## 2026-10-21 — disabled emSign ECC Root CA - G3 (intermediate key compromise)
+
+Disabled **emSign ECC Root CA - G3** (eMudhra Technologies Limited, SHA-256
+`86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B`) by renaming
+it to `*.disabled`.
+
+Rationale: on 2026-10-17 the private keys of eight eMudhra intermediate CA
+certificates were reported to the root programs as compromised. The reporter
+proved it by signing a test message with each key. These intermediates chain to
+this root. Mozilla blocked them through OneCRL and is removing the root in
+NSS 3.131.1. Chrome blocked them with a CRLSet and is removing the root in Chrome
+Root Store version 43. Apple and Microsoft acted on 2026-10-19 and 2026-10-20.
+`cacrt` has no revocation channel of its own, so we follow Mozilla's guidance for
+downstream stores: distrust the root.
+
+The other roots named in the incident's `roots.json` are not in this store. Those
+are `emSign Root TLS CA - G3` and `emSign Root CS CA - G3` (never in Mozilla),
+plus Sectigo's `AAA Certificate Services` (removed from Mozilla earlier), which
+cross-signed the affected keys. The other three eMudhra roots (G1, C1, C3) are
+not named in the incident and stay trusted.
+
+- <https://blog.mozilla.org/security/2026/10/20/protecting-firefox-users-following-the-compromise-of-emudhra-intermediate-certificates/>
+- <https://groups.google.com/a/mozilla.org/g/dev-security-policy/c/0R3XLJL6FuE/m/0XofdebrAAAJ>
+- <https://emudhra.we-have-a-problem.com/>
