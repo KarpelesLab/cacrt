@@ -43,8 +43,25 @@ it to `*.disabled`.
 
 Rationale: on 2026-10-17 the private keys of eight eMudhra intermediate CA
 certificates were reported to the root programs as compromised. The reporter
-proved it by signing a test message with each key. These intermediates chain to
-this root. Mozilla blocked them through OneCRL and is removing the root in
+proved it by signing a test message with each key. The keys were not stolen:
+eMudhra generated them badly. Each intermediate's P-384 private scalar is a tiny
+integer, so anyone can recover it by computing `k·G` for small `k` and comparing
+the result with the certificate's public key:
+
+| Intermediate | Private key |
+|---|---|
+| EM OV TLS CA - G3C | 4 |
+| EM EV TLS CA - G3C | 56 |
+| EM OV CS CA - G3B | 66 |
+| EM EV TLS CA - G3B | 115 |
+| EM OV TLS CA - G3B | 155 |
+| EM DV TLS CA - G3B | 156 |
+| EM DV TLS CA - G3C | 230 |
+| EM OV CS CA - G3C | 237 |
+
+We checked each value against the public keys in the incident's
+`impacted-intermediates.json`. The keys date back to issuance (April 2025), so
+the intermediates were never secure. These intermediates chain to this root. Mozilla blocked them through OneCRL and is removing the root in
 NSS 3.131.1. Chrome blocked them with a CRLSet and is removing the root in Chrome
 Root Store version 43. Apple and Microsoft acted on 2026-10-19 and 2026-10-20.
 `cacrt` has no revocation channel of its own, so we follow Mozilla's guidance for
