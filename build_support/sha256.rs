@@ -1,6 +1,4 @@
-//! Minimal SHA-256 (FIPS 180-4), `core`-only so the same file serves both the
-//! `no_std` library (the optional `check` feature) and the host-side build
-//! helpers, which include it via `#[path]`. Used to fingerprint certificates and
+//! Minimal SHA-256 (FIPS 180-4), used to fingerprint blocked certificates and
 //! their `SubjectPublicKeyInfo` for the blocklist.
 
 const K: [u32; 64] = [
@@ -50,12 +48,7 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 fn process(h: &mut [u32; 8], block: &[u8]) {
     let mut w = [0u32; 64];
     for i in 0..16 {
-        w[i] = u32::from_be_bytes([
-            block[i * 4],
-            block[i * 4 + 1],
-            block[i * 4 + 2],
-            block[i * 4 + 3],
-        ]);
+        w[i] = u32::from_be_bytes(block[i * 4..i * 4 + 4].try_into().unwrap());
     }
     for i in 16..64 {
         let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
@@ -95,10 +88,7 @@ fn process(h: &mut [u32; 8], block: &[u8]) {
 
 #[cfg(test)]
 mod tests {
-    // The library is `no_std`; pull in std explicitly for the test helpers.
-    extern crate std;
     use super::sha256;
-    use std::{format, string::String, vec};
 
     fn hex(d: &[u8]) -> String {
         d.iter().map(|b| format!("{b:02x}")).collect()

@@ -50,14 +50,11 @@
 //!
 //! ```
 //! # let spki_sha256 = [0u8; 32];
-//! // SHA-256 of the DER `SubjectPublicKeyInfo`, computed with your own crypto.
+//! // SHA-256 of the DER `SubjectPublicKeyInfo`, computed by your TLS library.
 //! if let Some(b) = cacrt::blocked_by_spki(&spki_sha256) {
 //!     panic!("blocked: {} ({})", b.label(), b.reason());
 //! }
 //! ```
-//!
-//! With the `check` feature, `check_chain` and `blocked_by_der` parse and hash
-//! the DER for you (still `no_std`, no `alloc`).
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -162,13 +159,6 @@ include!(concat!(env!("OUT_DIR"), "/certs.rs"));
 
 // Generated: `pub(crate) static BLOCKED: &[Blocked]`, sorted by (SPKI, cert) SHA-256.
 include!(concat!(env!("OUT_DIR"), "/blocked.rs"));
-
-#[cfg(feature = "check")]
-mod check;
-#[cfg(feature = "check")]
-mod sha256;
-#[cfg(feature = "check")]
-pub use check::{blocked_by_der, check_chain, ChainError, ParseError};
 
 /// All embedded CA certificates, sorted by subject hash then sequence number.
 pub fn all() -> &'static [Cert] {

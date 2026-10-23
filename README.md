@@ -76,13 +76,13 @@ it, leaf to root, including a root that came from the OS store.** A root that
 `cacrt` disabled then stays rejected on systems that still trust it.
 
 ```rust
-// Zero-cost lookups: hash with your own crypto, compare against static data.
-if let Some(b) = cacrt::blocked_by_spki(&spki_sha256) {
+// For each certificate in the verified chain, root included. Your TLS library
+// already parses the DER; hash the SubjectPublicKeyInfo and the certificate.
+if let Some(b) = cacrt::blocked_by_spki(&spki_sha256)
+    .or_else(|| cacrt::blocked_by_cert(&cert_sha256))
+{
     return Err(format!("blocked: {} ({})", b.label(), b.reason()));
 }
-
-// Or, with the `check` feature, pass the DER chain and let cacrt parse and hash.
-cacrt::check_chain(&[leaf_der, intermediate_der, root_der])?;
 ```
 
 | Function | Purpose |
@@ -90,8 +90,6 @@ cacrt::check_chain(&[leaf_der, intermediate_der, root_der])?;
 | `cacrt::blocked() -> &'static [Blocked]` | Every blocked certificate, with `kind()`, `label()`, `reason()` and both hashes. |
 | `cacrt::blocked_by_spki(&[u8; 32]) -> Option<&Blocked>` | Is this **key** blocked? (SHA-256 of the DER SPKI.) |
 | `cacrt::blocked_by_cert(&[u8; 32]) -> Option<&Blocked>` | Is this **certificate** blocked? (SHA-256 of its DER.) |
-| `cacrt::blocked_by_der(&[u8])` *(feature `check`)* | Both checks on one DER certificate. |
-| `cacrt::check_chain(&[&[u8]])` *(feature `check`)* | Check every certificate of a chain and report the first blocked one. |
 
 The blocklist only helps verifiers that call it. Generic TLS stacks (rustls,
 OpenSSL) know nothing about it. Hook it in after normal verification, for
@@ -138,9 +136,8 @@ cargo run --example cacrt-tool -- hash path/to/cert.pem
 ## `no_std` / no-`alloc` guarantee
 
 The library is `#![no_std]`, `#![forbid(unsafe_code)]`, and never references
-`alloc`, with or without the `check` feature. CI builds both for
-`thumbv7em-none-eabi` (a bare-metal target with no std and no default allocator)
-to prove it.
+`alloc`. CI builds it for `thumbv7em-none-eabi` (a bare-metal target with no std
+and no default allocator) to prove it.
 
 ## License
 

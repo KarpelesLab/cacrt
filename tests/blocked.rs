@@ -81,17 +81,13 @@ fn unknown_hashes_are_not_blocked() {
     assert!(cacrt::blocked_by_cert(&[0; 32]).is_none());
 }
 
-// PEM decoding for the DER-level tests (`pem` reaches `base64` via `super::`).
-#[cfg(feature = "check")]
-#[path = "../build_support/base64.rs"]
-mod base64;
-#[cfg(feature = "check")]
-#[path = "../build_support/pem.rs"]
-mod pem;
+// The tests below play the caller's role: parse and hash the DER themselves
+// (with the build helpers), then query the lookups the way a TLS library would.
+#[path = "../build_support/mod.rs"]
+mod build_support;
 
-#[cfg(feature = "check")]
-mod check {
-    use super::pem;
+mod from_der {
+    use super::build_support::{der, pem, sha256::sha256};
     use std::path::{Path, PathBuf};
 
     fn files(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
@@ -109,63 +105,49 @@ mod check {
         pem::read_one_certificate(&std::fs::read_to_string(path).unwrap()).unwrap()
     }
 
-    fn blocked_files() -> Vec<PathBuf> {
+    /// What a verifier does for one certificate of its chain.
+    fn lookup(cert: &[u8]) -> Option<&'static cacrt::Blocked> {
+        let tbs = der::tbs_certificate(cert).unwrap();
+        let spki = der::tbs_field(tbs, der::TbsField::Spki).unwrap();
+        cacrt::blocked_by_spki(&sha256(spki)).or_else(|| cacrt::blocked_by_cert(&sha256(cert)))
+    }
+
+    #[test]
+    fn every_blocked_file_is_caught() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut v = Vec::new();
         files(&root.join("roots"), "disabled", &mut v);
         files(&root.join("blocked"), "pem", &mut v);
         assert_eq!(v.len(), 19);
-        v
-    }
-
-    #[test]
-    fn every_blocked_file_is_caught_from_der() {
-        for path in blocked_files() {
+        for path in v {
             let d = der(&path);
+            let b = lookup(&d).unwrap_or_else(|| panic!("{} not blocked", path.display()));
             assert!(
-                cacrt::blocked_by_der(&d).unwrap().is_some(),
-                "{} not blocked",
+                cacrt::blocked_by_cert(&sha256(&d)).is_some(),
+                "{}: cert hash not listed",
                 path.display()
             );
+            assert_eq!(*b.spki_sha256(), {
+                let tbs = der::tbs_certificate(&d).unwrap();
+                sha256(der::tbs_field(tbs, der::TbsField::Spki).unwrap())
+            });
         }
     }
 
     #[test]
-    fn trusted_roots_pass() {
-        let chain: Vec<&[u8]> = cacrt::all().iter().map(|c| c.der()).collect();
-        cacrt::check_chain(&chain).expect("no embedded root may be blocked");
+    fn no_trusted_root_is_blocked() {
+        for ca in cacrt::all() {
+            assert!(lookup(ca.der()).is_none(), "{} is blocked", ca.label());
+        }
     }
 
     #[test]
-    fn chain_with_os_supplied_disabled_root_is_rejected() {
+    fn os_supplied_disabled_root_is_rejected() {
         // A chain whose anchor came from an OS store that still trusts emSign
-        // ECC Root CA - G3: the trusted root before it passes, the root fails.
+        // ECC Root CA - G3: checking the root, not just the intermediates, is
+        // what catches it.
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let disabled = der(&root.join("roots/eMudhra/emSign_ECC_Root_CA_G3.disabled"));
-        let ok = cacrt::lookup("062cdee6.0").unwrap().der();
-        match cacrt::check_chain(&[ok, &disabled]) {
-            Err(cacrt::ChainError::Blocked { index: 1, entry }) => {
-                assert_eq!(entry.label(), "emSign ECC Root CA - G3")
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-    }
-
-    #[test]
-    fn malformed_der_is_reported() {
-        let ok = cacrt::lookup("062cdee6.0").unwrap().der();
-        let truncated = &ok[..ok.len() - 1];
-        for bad in [
-            &[][..],
-            &[0x30, 0x00][..],
-            truncated,
-            &[0x30, 0x85, 1, 1, 1, 1, 1][..],
-        ] {
-            assert!(cacrt::blocked_by_der(bad).is_err());
-        }
-        assert!(matches!(
-            cacrt::check_chain(&[ok, truncated]),
-            Err(cacrt::ChainError::Malformed { index: 1 })
-        ));
+        let anchor = der(&root.join("roots/eMudhra/emSign_ECC_Root_CA_G3.disabled"));
+        assert_eq!(lookup(&anchor).unwrap().label(), "emSign ECC Root CA - G3");
     }
 }

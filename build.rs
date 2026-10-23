@@ -39,7 +39,6 @@ fn main() {
     // Rebuild when the root set, the blocklist or the generators change.
     println!("cargo:rerun-if-changed=roots");
     println!("cargo:rerun-if-changed=blocked");
-    println!("cargo:rerun-if-changed=src/sha256.rs");
     println!("cargo:rerun-if-changed=build_support");
     println!("cargo:rerun-if-changed=build.rs");
 
