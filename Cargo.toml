@@ -32,5 +32,13 @@ unsafe_code = "forbid"
 [lib]
 path = "src/lib.rs"
 
+[features]
+# Runtime blocklist checks on DER certificates (`check_chain`, `blocked_by_der`):
+# adds a tiny DER walker and SHA-256. Still no_std, no alloc, no dependencies.
+check = []
+
+[package.metadata.docs.rs]
+all-features = true
+
 # The library itself needs nothing. build.rs and examples use only std + the
 # hand-rolled helpers under build_support/, so there are no dependencies at all.

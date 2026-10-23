@@ -21,8 +21,12 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy (check feature)
+        run: cargo clippy --all-targets --features check -- -D warnings
       - name: Test (includes openssl subject-hash cross-check)
         run: cargo test --all-targets
+      - name: Test (check feature)
+        run: cargo test --all-targets --features check
       - name: Verify curated roots against curation rules
         run: cargo run --example cacrt-tool -- verify
 
@@ -38,6 +42,8 @@ jobs:
       # allocator. If it referenced std or alloc, this would fail to compile.
       - name: Build library for thumbv7em-none-eabi
         run: cargo build --lib --target thumbv7em-none-eabi
+      - name: Build library for thumbv7em-none-eabi (check feature)
+        run: cargo build --lib --target thumbv7em-none-eabi --features check
 
   msrv:
     name: Minimum supported Rust version

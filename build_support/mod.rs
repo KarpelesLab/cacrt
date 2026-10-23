@@ -14,6 +14,9 @@ pub mod der;
 pub mod octal;
 pub mod pem;
 pub mod sha1;
+// Shared with the library's optional runtime `check` feature.
+#[path = "../src/sha256.rs"]
+pub mod sha256;
 
 /// Compute the OpenSSL subject hash of a DER-encoded certificate.
 ///

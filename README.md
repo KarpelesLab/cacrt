@@ -56,6 +56,47 @@ for candidate in cacrt::find_by_subject(issuer_der_name) {
 Each `Cert` exposes `der()`, `subject_der()`, `subject_hash()`, `seq()`,
 `label()`, and `hash_name()` (a `Display` value — no allocation needed).
 
+## Blocklist: check the whole chain
+
+Leaving a CA out of the store is not enough when your software also trusts
+another store, such as the operating system's. So `cacrt` also ships a
+**blocklist** of certificates that must never be trusted, wherever they come
+from:
+
+- every root `cacrt` has disabled (`roots/**/*.disabled`), and
+- compromised intermediates (`blocked/`), such as the eMudhra intermediates
+  whose private keys were trivially small integers.
+
+Entries are keyed by the SHA-256 of the certificate **and** of its
+`SubjectPublicKeyInfo`. Matching on the key catches every certificate that
+carries it: cross-signs, reissues and copies we have never seen.
+
+After your verifier has built and accepted a chain, **check every certificate in
+it, leaf to root, including a root that came from the OS store.** A root that
+`cacrt` disabled then stays rejected on systems that still trust it.
+
+```rust
+// Zero-cost lookups: hash with your own crypto, compare against static data.
+if let Some(b) = cacrt::blocked_by_spki(&spki_sha256) {
+    return Err(format!("blocked: {} ({})", b.label(), b.reason()));
+}
+
+// Or, with the `check` feature, pass the DER chain and let cacrt parse and hash.
+cacrt::check_chain(&[leaf_der, intermediate_der, root_der])?;
+```
+
+| Function | Purpose |
+|---|---|
+| `cacrt::blocked() -> &'static [Blocked]` | Every blocked certificate, with `kind()`, `label()`, `reason()` and both hashes. |
+| `cacrt::blocked_by_spki(&[u8; 32]) -> Option<&Blocked>` | Is this **key** blocked? (SHA-256 of the DER SPKI.) |
+| `cacrt::blocked_by_cert(&[u8; 32]) -> Option<&Blocked>` | Is this **certificate** blocked? (SHA-256 of its DER.) |
+| `cacrt::blocked_by_der(&[u8])` *(feature `check`)* | Both checks on one DER certificate. |
+| `cacrt::check_chain(&[&[u8]])` *(feature `check`)* | Check every certificate of a chain and report the first blocked one. |
+
+The blocklist only helps verifiers that call it. Generic TLS stacks (rustls,
+OpenSSL) know nothing about it. Hook it in after normal verification, for
+example from a rustls `ServerCertVerifier` wrapper.
+
 ## The `062cdee6.0` naming
 
 This is exactly OpenSSL's hash-directory filename (`c_rehash` / `openssl
@@ -97,8 +138,9 @@ cargo run --example cacrt-tool -- hash path/to/cert.pem
 ## `no_std` / no-`alloc` guarantee
 
 The library is `#![no_std]`, `#![forbid(unsafe_code)]`, and never references
-`alloc`. CI builds it for `thumbv7em-none-eabi` (a bare-metal target with no std
-and no default allocator) to prove it.
+`alloc`, with or without the `check` feature. CI builds both for
+`thumbv7em-none-eabi` (a bare-metal target with no std and no default allocator)
+to prove it.
 
 ## License
 

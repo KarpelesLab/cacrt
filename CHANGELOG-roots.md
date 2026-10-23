@@ -35,6 +35,20 @@ roots serve no purpose as trust anchors. The certificate files and the company
 `README.md` (with full rationale and sources) are kept in `roots/Buypass/`.
 See <https://www.buypass.com/products/tls-ssl-certificates/discontinues-issuance-of-tls-ssl-certificates>.
 
+## 2026-10-24 — blocklist: disabled roots and eMudhra intermediates
+
+Added a blocklist that ships in the crate (`cacrt::blocked()`, see `CURATION.md`
+"Blocking intermediates"). It starts with 19 certificates:
+
+- the 3 disabled roots: **emSign ECC Root CA - G3**, **Buypass Class 2 Root CA**
+  and **Buypass Class 3 Root CA**;
+- the 16 compromised eMudhra intermediate certificates (8 keys, each issued by
+  emSign Root TLS/CS CA - G3 and cross-signed by Sectigo AAA Certificate
+  Services), in `blocked/2026-10-emudhra-intermediates/`.
+
+Callers that check every certificate in their chain now reject these even when
+their anchor comes from an OS store that still trusts them.
+
 ## 2026-10-21 — disabled emSign ECC Root CA - G3 (intermediate key compromise)
 
 Disabled **emSign ECC Root CA - G3** (eMudhra Technologies Limited, SHA-256
