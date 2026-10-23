@@ -18,8 +18,9 @@ description = "Curated, no_std/no-alloc access to DER-encoded CA root certificat
 repository = "https://github.com/KarpelesLab/cacrt"
 keywords = ["ca", "certificate", "x509", "no_std", "tls"]
 categories = ["no-std", "cryptography", "embedded"]
-# Ship the roots + generators, but not throwaway artifacts.
-exclude = ["/.github", "/*.txt"]
+# Ship the roots + generators, but not throwaway artifacts or the incident
+# evidence archive (it holds deliberately public, revoked CA private keys).
+exclude = ["/.github", "/*.txt", "/evidence"]
 
 # Forbid unsafe across every target in the package (lib, build script,
 # examples, tests). The library also carries #![forbid(unsafe_code)] in

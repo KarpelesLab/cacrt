@@ -61,7 +61,13 @@ the result with the certificate's public key:
 
 We checked each value against the public keys in the incident's
 `impacted-intermediates.json`. The keys date back to issuance (April 2025), so
-the intermediates were never secure. These intermediates chain to this root. Mozilla blocked them through OneCRL and is removing the root in
+the intermediates were never secure. All 16 certificates (each key was certified
+by its eMudhra root and cross-signed by Sectigo) and the 8 private keys are
+archived, with a verification script, in
+[`evidence/2026-10-emudhra-intermediates/`](evidence/2026-10-emudhra-intermediates/).
+
+These intermediates chain to this root. Mozilla blocked them through OneCRL and
+is removing the root in
 NSS 3.131.1. Chrome blocked them with a CRLSet and is removing the root in Chrome
 Root Store version 43. Apple and Microsoft acted on 2026-10-19 and 2026-10-20.
 `cacrt` has no revocation channel of its own, so we follow Mozilla's guidance for
