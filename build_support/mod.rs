@@ -14,6 +14,7 @@ pub mod der;
 pub mod octal;
 pub mod pem;
 pub mod sha1;
+pub mod sha256;
 
 /// Compute the OpenSSL subject hash of a DER-encoded certificate.
 ///

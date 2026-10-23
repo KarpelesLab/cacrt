@@ -1,4 +1,5 @@
 # Label: Buypass Class 2 Root CA
+# Blocked: root disabled 2026-06-04, Buypass ended public TLS issuance (all certificates expired by 2026-04-15); see CHANGELOG-roots.md 2026-06-04
 # OpenSSL subject hash: 9734f1e6
 # SHA1 fingerprint: 49:0A:75:74:DE:87:0A:47:FE:58:EE:F6:C7:6B:EB:C6:0B:12:40:99
 # Source: Mozilla NSS certdata.txt (CKT_NSS_TRUSTED_DELEGATOR, server auth)

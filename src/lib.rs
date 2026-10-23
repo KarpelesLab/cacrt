@@ -32,6 +32,29 @@
 //!
 //! To find the issuer of a certificate without hashing at runtime, match the
 //! issuer's raw DER `Name` against each CA's subject with [`find_by_subject`].
+//!
+//! # Blocklist
+//!
+//! Some certificates must never be trusted, even when another trust store (the
+//! operating system's, say) still contains them: intermediates whose private
+//! keys were compromised, and roots that `cacrt` has disabled. [`blocked`] lists
+//! them, keyed by the SHA-256 of the certificate and of its
+//! `SubjectPublicKeyInfo`.
+//!
+//! Your verifier must check **every certificate in the chain, including the
+//! root**, against it, after building and verifying the path. Checking the root
+//! is what protects you when it comes from another store: a root `cacrt` has
+//! disabled is still blocked, even if the OS still trusts it. Match on the key
+//! ([`blocked_by_spki`]) rather than only the certificate: a compromised key
+//! is usually certified more than once (cross-signs, reissues).
+//!
+//! ```
+//! # let spki_sha256 = [0u8; 32];
+//! // SHA-256 of the DER `SubjectPublicKeyInfo`, computed by your TLS library.
+//! if let Some(b) = cacrt::blocked_by_spki(&spki_sha256) {
+//!     panic!("blocked: {} ({})", b.label(), b.reason());
+//! }
+//! ```
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -134,6 +157,9 @@ impl core::fmt::Debug for HashName {
 // Generated: `pub(crate) static CERTS: &[Cert]`, sorted by (subject_hash, seq).
 include!(concat!(env!("OUT_DIR"), "/certs.rs"));
 
+// Generated: `pub(crate) static BLOCKED: &[Blocked]`, sorted by (SPKI, cert) SHA-256.
+include!(concat!(env!("OUT_DIR"), "/blocked.rs"));
+
 /// All embedded CA certificates, sorted by subject hash then sequence number.
 pub fn all() -> &'static [Cert] {
     CERTS
@@ -170,4 +196,93 @@ pub fn lookup(name: &str) -> Option<&'static Cert> {
 /// hashing at runtime.
 pub fn find_by_subject<'a>(subject_der: &'a [u8]) -> impl Iterator<Item = &'static Cert> + 'a {
     CERTS.iter().filter(move |c| c.subject == subject_der)
+}
+
+/// Whether a blocked certificate is a root (self-issued) or an intermediate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockedKind {
+    /// A self-issued root `cacrt` has disabled (`roots/**/*.disabled`).
+    Root,
+    /// A CA certificate that is not self-issued, e.g. a compromised intermediate.
+    Intermediate,
+}
+
+/// A certificate that must not be trusted, wherever it is found.
+pub struct Blocked {
+    kind: BlockedKind,
+    spki_sha256: [u8; 32],
+    cert_sha256: [u8; 32],
+    label: &'static str,
+    reason: &'static str,
+}
+
+impl Blocked {
+    /// Construct an entry. Only called by generated code in `blocked.rs`.
+    const fn new(
+        kind: BlockedKind,
+        spki_sha256: [u8; 32],
+        cert_sha256: [u8; 32],
+        label: &'static str,
+        reason: &'static str,
+    ) -> Self {
+        Blocked {
+            kind,
+            spki_sha256,
+            cert_sha256,
+            label,
+            reason,
+        }
+    }
+
+    /// Root or intermediate.
+    pub const fn kind(&self) -> BlockedKind {
+        self.kind
+    }
+
+    /// SHA-256 of the certificate's DER `SubjectPublicKeyInfo`.
+    pub const fn spki_sha256(&self) -> &[u8; 32] {
+        &self.spki_sha256
+    }
+
+    /// SHA-256 of the full DER certificate (its usual fingerprint).
+    pub const fn cert_sha256(&self) -> &[u8; 32] {
+        &self.cert_sha256
+    }
+
+    /// A human-readable label for the certificate.
+    pub const fn label(&self) -> &'static str {
+        self.label
+    }
+
+    /// Why the certificate is blocked, with a pointer to `CHANGELOG-roots.md`.
+    pub const fn reason(&self) -> &'static str {
+        self.reason
+    }
+}
+
+impl core::fmt::Debug for Blocked {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Blocked")
+            .field("kind", &self.kind)
+            .field("label", &self.label)
+            .finish()
+    }
+}
+
+/// Every blocked certificate, sorted by SPKI SHA-256 then certificate SHA-256.
+pub fn blocked() -> &'static [Blocked] {
+    BLOCKED
+}
+
+/// The first blocked entry whose `SubjectPublicKeyInfo` has this SHA-256, if
+/// any. A match means the key itself is distrusted, so every certificate
+/// carrying it must be rejected, including ones not listed in [`blocked`].
+pub fn blocked_by_spki(spki_sha256: &[u8; 32]) -> Option<&'static Blocked> {
+    let i = BLOCKED.partition_point(|b| b.spki_sha256 < *spki_sha256);
+    BLOCKED.get(i).filter(|b| b.spki_sha256 == *spki_sha256)
+}
+
+/// The blocked entry for the certificate whose DER has this SHA-256, if any.
+pub fn blocked_by_cert(cert_sha256: &[u8; 32]) -> Option<&'static Blocked> {
+    BLOCKED.iter().find(|b| b.cert_sha256 == *cert_sha256)
 }

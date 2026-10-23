@@ -3,13 +3,15 @@
 //! Reads the curated `roots/*.pem` set, computes each certificate's OpenSSL
 //! subject hash, validates it against the curation rules, and emits a sorted,
 //! indexed static table to `$OUT_DIR/certs.rs` (plus the raw DER blobs under
-//! `$OUT_DIR/der/`). The library `include!`s that file; nothing here ends up in
-//! the runtime, which stays `#![no_std]` with no `alloc`.
+//! `$OUT_DIR/der/`). It also fingerprints every blocked certificate (disabled
+//! `roots/**/*.disabled` plus `blocked/**/*.pem`) into `$OUT_DIR/blocked.rs`.
+//! The library `include!`s both files; nothing here ends up in the runtime,
+//! which stays `#![no_std]` with no `alloc`.
 
 #[path = "build_support/mod.rs"]
 mod build_support;
 
-use build_support::{curation, der, pem, subject_hash};
+use build_support::{curation, der, pem, sha256::sha256, subject_hash};
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -20,13 +22,23 @@ struct Entry {
     label: String,
 }
 
+struct BlockedEntry {
+    is_root: bool,
+    spki_sha256: [u8; 32],
+    cert_sha256: [u8; 32],
+    label: String,
+    reason: String,
+}
+
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR");
     let roots = Path::new(&manifest).join("roots");
+    let blocked_dir = Path::new(&manifest).join("blocked");
 
-    // Rebuild when the root set or the generators change.
+    // Rebuild when the root set, the blocklist or the generators change.
     println!("cargo:rerun-if-changed=roots");
+    println!("cargo:rerun-if-changed=blocked");
     println!("cargo:rerun-if-changed=build_support");
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -35,7 +47,7 @@ fn main() {
 
     // Roots are organized one folder per operating company, so walk recursively.
     let mut pems = Vec::new();
-    collect_pems(&roots, &mut pems);
+    collect_files(&roots, "pem", &mut pems);
     pems.sort();
     for path in &pems {
         println!("cargo:rerun-if-changed={}", path.display());
@@ -108,23 +120,128 @@ fn main() {
     writeln!(src, "];").unwrap();
 
     std::fs::write(Path::new(&out_dir).join("certs.rs"), src).expect("write certs.rs");
+
+    write_blocklist(&roots, &blocked_dir, &entries, &out_dir);
 }
 
-/// Recursively collect every `*.pem` under `dir` (roots are nested one folder
+/// Fingerprint every blocked certificate and emit `$OUT_DIR/blocked.rs`.
+///
+/// Sources are the disabled roots (`roots/**/*.disabled`) and the blocked
+/// intermediates (`blocked/**/*.pem`). Each file must carry a `# Blocked:`
+/// header giving the reason, and any `# SHA256 fingerprint:` / `# SPKI SHA256:`
+/// header must match what we compute. A trusted root sharing a key with a
+/// blocked entry fails the build: the two lists would contradict each other.
+fn write_blocklist(roots: &Path, blocked_dir: &Path, trusted: &[Entry], out_dir: &str) {
+    let mut files = Vec::new();
+    collect_files(roots, "disabled", &mut files);
+    if blocked_dir.is_dir() {
+        collect_files(blocked_dir, "pem", &mut files);
+    }
+    files.sort();
+
+    let mut blocked = Vec::new();
+    for path in &files {
+        println!("cargo:rerun-if-changed={}", path.display());
+        let file = path.display().to_string();
+        let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let der = pem::read_one_certificate(&text).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let tbs = der::tbs_certificate(&der).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let field = |f| der::tbs_field(tbs, f).unwrap_or_else(|e| panic!("{file}: {e}"));
+        let spki = field(der::TbsField::Spki);
+        let is_root = field(der::TbsField::Subject) == field(der::TbsField::Issuer);
+
+        let reason = parse_header(&text, "# Blocked:")
+            .unwrap_or_else(|| panic!("{file}: missing `# Blocked: <reason>` header"));
+        let spki_sha256 = sha256(spki);
+        let cert_sha256 = sha256(&der);
+        for (header, digest) in [
+            ("# SHA256 fingerprint:", &cert_sha256),
+            ("# SPKI SHA256:", &spki_sha256),
+        ] {
+            if let Some(want) = parse_header(&text, header) {
+                assert!(
+                    want.eq_ignore_ascii_case(&hex(digest)),
+                    "{file}: `{header}` header does not match the certificate"
+                );
+            }
+        }
+        for t in trusted {
+            let t_tbs = der::tbs_certificate(&t.der).expect("trusted root re-parse");
+            let t_spki = der::tbs_field(t_tbs, der::TbsField::Spki).expect("trusted root SPKI");
+            assert!(
+                sha256(t_spki) != spki_sha256,
+                "{file}: blocked key is also trusted via root {:?}",
+                t.label
+            );
+        }
+
+        let label =
+            parse_label(&text).unwrap_or_else(|| stem(path.file_name().unwrap().to_str().unwrap()));
+        blocked.push(BlockedEntry {
+            is_root,
+            spki_sha256,
+            cert_sha256,
+            label,
+            reason,
+        });
+    }
+
+    // Sorted by (SPKI, cert) so the table is deterministic and binary-searchable
+    // by key; certificates sharing a key (cross-signs) end up adjacent.
+    blocked.sort_by_key(|b| (b.spki_sha256, b.cert_sha256));
+    for w in blocked.windows(2) {
+        assert!(
+            w[0].cert_sha256 != w[1].cert_sha256 || w[0].spki_sha256 != w[1].spki_sha256,
+            "certificate {:?} is blocked twice",
+            w[0].label
+        );
+    }
+
+    let mut src = String::new();
+    src.push_str(
+        "// @generated by build.rs from roots/**/*.disabled and blocked/**/*.pem — do not edit.\n",
+    );
+    writeln!(src, "pub(crate) static BLOCKED: &[Blocked] = &[").unwrap();
+    for b in &blocked {
+        writeln!(
+            src,
+            "    Blocked::new({}, {:?}, {:?}, {:?}, {:?}),",
+            if b.is_root {
+                "BlockedKind::Root"
+            } else {
+                "BlockedKind::Intermediate"
+            },
+            b.spki_sha256,
+            b.cert_sha256,
+            b.label,
+            b.reason
+        )
+        .unwrap();
+    }
+    writeln!(src, "];").unwrap();
+    std::fs::write(Path::new(out_dir).join("blocked.rs"), src).expect("write blocked.rs");
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02X}")).collect()
+}
+
+/// Recursively collect every `*.<ext>` under `dir` (roots are nested one folder
 /// per company). Emits `rerun-if-changed` for each directory so that adding or
 /// removing a root triggers a rebuild.
-fn collect_pems(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+fn collect_files(dir: &Path, ext: &str, out: &mut Vec<std::path::PathBuf>) {
     println!("cargo:rerun-if-changed={}", dir.display());
     let entries =
         std::fs::read_dir(dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
     for ent in entries {
         let path = ent.expect("dir entry").path();
         if path.is_dir() {
-            collect_pems(&path, out);
-        } else if path.extension().and_then(|s| s.to_str()) == Some("pem") {
-            // Only *.pem is compiled in. A retired root is renamed to
-            // `*.disabled` so it stays in the repo (audit trail) but is excluded
-            // from the store — see CURATION.md "Disabling a root".
+            collect_files(&path, ext, out);
+        } else if path.extension().and_then(|s| s.to_str()) == Some(ext) {
+            // Only roots/**/*.pem is compiled into the store. A retired root is
+            // renamed to `*.disabled` so it stays in the repo (audit trail), is
+            // excluded from the store and lands on the blocklist instead — see
+            // CURATION.md "Disabling a root".
             out.push(path);
         }
     }
@@ -132,8 +249,13 @@ fn collect_pems(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 
 /// Pull the friendly name out of the `# Label: ...` PEM header comment.
 fn parse_label(text: &str) -> Option<String> {
+    parse_header(text, "# Label:")
+}
+
+/// The trimmed, non-empty value of the first `<prefix> value` header line.
+fn parse_header(text: &str, prefix: &str) -> Option<String> {
     text.lines()
-        .find_map(|l| l.trim_start().strip_prefix("# Label:"))
+        .find_map(|l| l.trim_start().strip_prefix(prefix))
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
 }

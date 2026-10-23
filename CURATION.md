@@ -85,9 +85,32 @@ trail intact (we can always see what was once trusted and why it was dropped)
 without deleting history. Record every such change in `CHANGELOG-roots.md`, and
 add a status banner to the company's `README.md`.
 
+A disabled root is also **blocked**: it goes on the blocklist the crate ships
+(`cacrt::blocked()`), so callers that check their whole chain reject it even when
+it comes from another trust store. Every `.disabled` file must carry a
+`# Blocked: <reason>` header line; the build fails without one.
+
 Typical reasons to disable rather than keep a root: the CA has stopped issuing
 TLS certificates and all of its end-entity certificates have since expired (so the
 anchor can no longer serve any live chain), or a root program has distrusted it.
+
+## Blocking intermediates
+
+Some incidents call for distrusting specific CA certificates rather than (or
+before) a whole root, for example an intermediate whose private key is
+compromised. Put each such certificate as a PEM file under
+`blocked/<YYYY-MM>-<incident>/`, with a `# Blocked: <reason>` header and a
+`README.md` for the incident. Include **every** certificate known to carry the
+key, cross-signs included. Never commit private keys there: `blocked/` ships in
+the crate. Evidence that includes keys belongs in `evidence/`, which does not ship.
+
+The build fingerprints each file (SHA-256 of the certificate and of its
+`SubjectPublicKeyInfo`), checks any `# SHA256 fingerprint:` / `# SPKI SHA256:`
+header against the certificate, and fails if a blocked key is also the key of a
+trusted root.
+
+Blocking an intermediate protects only callers that check the blocklist. When a
+root program removes the root itself, disable the root as well.
 
 ## Auditability
 

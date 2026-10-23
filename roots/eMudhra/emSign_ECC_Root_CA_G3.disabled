@@ -1,4 +1,5 @@
 # Label: emSign ECC Root CA - G3
+# Blocked: root disabled 2026-10-21 after eMudhra intermediate private key compromise; see CHANGELOG-roots.md 2026-10-21
 # OpenSSL subject hash: 14bc7599
 # SHA1 fingerprint: 30:43:FA:4F:F2:57:DC:A0:C3:80:EE:2E:58:EA:78:B2:3F:E6:BB:C1
 # Source: Mozilla NSS certdata.txt (CKT_NSS_TRUSTED_DELEGATOR, server auth)
